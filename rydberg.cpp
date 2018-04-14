@@ -195,9 +195,7 @@ vector<double> Lattice1D::update() {
         }
         alpha /= (dx*dx);
         double beta = 1.-Gamma-Gamma*b*h[i] - 2./(dx*dx);
-        double scale = 1 / ((1.-Gamma) * (1.-Gamma));
-        scale = 10000.;
-        double lambda = 2.*beta * scale / (exp(beta*dt) - 1.);
+        double lambda = 2.*beta / (exp(beta*dt) - 1.);
         poisson_distribution<int> PoissonDist(lambda * p[i] * exp(beta*dt));
         gamma_distribution<double> GammaDist(2.*alpha + PoissonDist(generator), 1.0);
         double pStar = GammaDist(generator) / lambda;
