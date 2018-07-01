@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall
+CXXFLAGS = -std=c++11 -Wall -I /usr/local/boost_1_67_0
 LDFLAGS = -lm -lgsl -lgslcblas
 DEPS = rydberg.hpp
 OBJ1 = rydberg.o run_sim.o

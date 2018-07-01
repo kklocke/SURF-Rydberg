@@ -9,6 +9,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <cstdio>
+#include <boost/random.hpp>
+#include <boost/random/gamma_distribution.hpp>
+#include <boost/random/poisson_distribution.hpp>
+#include <boost/random/variate_generator.hpp>
+#include <boost/random/mersenne_twister.hpp>
 
 using namespace std;
 
@@ -31,7 +36,7 @@ class Lattice1D
 {
 public:
     Lattice1D();
-    Lattice1D(double myT, double myDT, double myGamma, double myB, double myPo, int myNsites, double myDx);
+    Lattice1D(double myT, double myDT, double myGamma, double myB, double myPo, int myNsites, double myDx, double myKappa);
     ~Lattice1D();
     vector <double> getConfig();
     void reset();
@@ -40,8 +45,12 @@ public:
     vector<vector<double> > simulation();
     vector<vector<vector<double> > > simulation(int N);
     vector<vector<double> > sim_avg(int N);
+    void exciteSite(int site, double seed);
+    vector<double> getP();
+    vector<double> getH();
+    vector<double> euler_update();
 private:
-    double T, Tmax, Gamma, dt, po, dx, b;
+    double T, Tmax, Gamma, dt, po, dx, b, kappa;
     int Nsites;
     vector<double> p, h;
 };
@@ -83,3 +92,6 @@ private:
     int Nsites, L;
     vector<double> p, h;
 };
+
+double gamma_rand(double shape, double scale, boost::mt19937& rng);
+double poiss_rand(double shape, boost::mt19937& rng);

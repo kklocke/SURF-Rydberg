@@ -2,6 +2,11 @@
 
 default_random_engine generator (time(NULL));
 
+static int seed1= time(NULL); //437;
+static int seed2= time(NULL); //4357;
+static boost::mt19937 rnd_gen1(seed1);
+static boost::mt19937 rnd_gen2(seed2);
+
 OneSite::OneSite() {
     T = 0.;
     Tmax = 500.;
@@ -12,7 +17,6 @@ OneSite::OneSite() {
     p = po;
     h = 0.;
 }
-
 
 OneSite::OneSite(double myT, double myDT, double myGamma, double myB, double myPo) {
     T = 0.;
@@ -45,9 +49,12 @@ void OneSite::reset() {
 double OneSite::update() {
     double beta = 1. - Gamma - Gamma * b * h;
     double lambda = 2.*beta / (exp(beta*dt) - 1.);
-    poisson_distribution<int> PoissonDist(lambda * p * exp(beta*dt));
-    gamma_distribution<double> GammaDist(PoissonDist(generator), 1.0);
-    double pStar = GammaDist(generator) / lambda;
+    double pShape = lambda * p * exp(beta * dt);
+    double pOut = poiss_rand(pShape, rnd_gen2);
+    // poisson_distribution<int> PoissonDist(lambda * p * exp(beta*dt));
+    double pStar = gamma_rand(pOut, 1.0, rnd_gen1) / lambda;
+    // gamma_distribution<double> GammaDist(PoissonDist(generator), 1.0);
+    // double pStar = GammaDist(generator) / lambda;
     pStar /= (1+2*dt*pStar);
     h += .5*dt*(pStar + p);
     p = pStar;
@@ -122,33 +129,27 @@ vector< vector<double> > OneSite::simulation(int N) {
     return toRet;
 }
 
-//
-// vector<double> mean_stdev(vector<double> dat) {
-//     vector<double> res;
-//     double sum = accumulate(dat.begin(), dat.end(), 0.0);
-//     double m = sum / dat.size();
-//     double accum = 0.0;
-//     for_each (dat.begin(), dat.end(), [&](const double d) {accum += (d-m)*(d-m);});
-//     double stdev = sqrt(accum / (dat.size()-1));
-//     res.push_back(m);
-//     res.push_back(stdev);
-//     return res;
-// }
-
 Lattice1D::Lattice1D() {
     T = 0.;
     Tmax = 200;
-    dt = .2;
-    dx = 1.;
-    Gamma = .7;
-    b = .01;
-    po = .01;
-    Nsites = 5e1;
+    dt = .1;
+    dx = 2.;
+    Gamma = -.63;
+    b = 0.;
+    po = 1e-1;
+    Nsites = 1e5;
     p = vector<double>(Nsites, po);
+    kappa = 1e-3;
+    // p = vector<double>(Nsites, 0.);
+    // int i = int(po * Nsites);
+    // for (int j = 0; j < i; j++) {
+    //     p[j] = .99;
+    // }
+    // random_shuffle(p.begin(), p.end());
     h = vector<double>(Nsites, 0.);
 }
 
-Lattice1D::Lattice1D(double my_Tmax, double my_dt, double my_Gamma, double my_b, double my_po, int my_Nsites, double my_dx) {
+Lattice1D::Lattice1D(double my_Tmax, double my_dt, double my_Gamma, double my_b, double my_po, int my_Nsites, double my_dx, double myKappa) {
     T = 0.;
     Tmax = my_Tmax;
     dt = my_dt;
@@ -158,6 +159,12 @@ Lattice1D::Lattice1D(double my_Tmax, double my_dt, double my_Gamma, double my_b,
     Nsites = my_Nsites;
     dx = my_dx;
     p = vector<double>(Nsites, po);
+    kappa = myKappa;
+    // p = vector<double>(Nsites, 0.);
+    // for (int i = 0; i < int(Nsites / 100); i++) {
+    //     p[i] = po * 100.;
+    // }
+    // random_shuffle(p.begin(), p.end());
     h = vector<double>(Nsites, 0.);
 }
 
@@ -176,32 +183,99 @@ vector<double> Lattice1D::getConfig() {
 
 void Lattice1D::reset() {
     T = 0.;
+    // int j = int(po * Nsites);
     for (int i = 0; i < Nsites; i ++) {
         p[i] = po;
         h[i] = 0.;
+        // if (i < j) {
+        //     p[i] = 0.99;
+        // }
     }
+    random_shuffle(p.begin(), p.end());
+}
+
+vector<double> Lattice1D::getP() {
+    return p;
+}
+
+void Lattice1D::exciteSite(int site, double seed) {
+    p[site] = seed;
+}
+
+vector<double> Lattice1D::getH() {
+    return h;
 }
 
 vector<double> Lattice1D::update() {
+    double sigma = sqrt(2.);
+    double Dtilde = 3.;
     vector<double> new_p (Nsites, 0.);
     vector<double> new_h (Nsites, 0.);
-        for (int i = 0; i < Nsites; i++) {
+    for (int i = 0; i < Nsites; i++) {
         double alpha = 0.;
         if (i != 0) {
             alpha += p[i-1];
         }
+        else {
+            alpha += p[Nsites - 1];
+        }
         if (i != Nsites - 1) {
             alpha += p[i+1];
         }
+        else {
+            alpha += p[0];
+        }
         alpha /= (dx*dx);
-        double beta = 1.-Gamma-Gamma*b*h[i] - 2./(dx*dx);
+        double beta = 1. + (kappa * T) -Gamma-Gamma*b*h[i] - 2./(dx*dx);
         double lambda = 2.*beta / (exp(beta*dt) - 1.);
-        poisson_distribution<int> PoissonDist(lambda * p[i] * exp(beta*dt));
-        gamma_distribution<double> GammaDist(2.*alpha + PoissonDist(generator), 1.0);
-        double pStar = GammaDist(generator) / lambda;
-        pStar /= (1. + pStar * dt * 2.);
+        lambda /= (sigma * sigma);
+        double pShape = lambda * p[i] * exp(beta * dt);
+        double pOut = poiss_rand(pShape, rnd_gen2);
+        double gShape = pOut + 2.*alpha / (sigma * sigma);
+        double gOut = gamma_rand(gShape, 1.0, rnd_gen1) / lambda;
+        double pStar = gOut;
+        // pStar /= (1. + pStar * dt * 2.);
+        pStar /= (1. + pStar * dt);
         new_p[i] = pStar;
-        new_h[i] = h[i] + .5 * dt * (pStar + p[i]);
+        double hStar = h[i] + 0.5*dt*(pStar + p[i]);
+        if (i == 0) {
+            hStar += dt * Dtilde * h[Nsites - 1] / (dx * dx);
+            // hStar += 0;
+        }
+        else {
+            hStar += dt * Dtilde * h[i-1] / (dx * dx);
+        }
+        hStar += dt * Dtilde * h[abs((i+1) % Nsites)] / (dx*dx);
+        // if (i == Nsites - 1) {
+        //     hStar += 0;
+        // }
+        // else {
+        //     hStar += dt * Dtilde * h[i+1] / (dx*dx);
+        // }
+        hStar -= 2. * dt * Dtilde*h[i]/(dx*dx);
+        new_h[i] = hStar;
+    }
+    p = new_p;
+    h = new_h;
+    T += dt;
+    return new_p;
+}
+
+vector<double> Lattice1D::euler_update() {
+    vector<double> new_p(Nsites, 0.);
+    vector<double> new_h(Nsites, 0.);
+    for (int i = 0; i < Nsites; i++) {
+        double myLapl = -2*p[i];
+        if (i != 0) {
+            myLapl += p[i-1];
+        }
+        if (i != Nsites - 1) {
+            myLapl += p[i+1];
+        }
+        myLapl /= (dx * dx);
+        double dp = myLapl + (1 - Gamma*(1+b*h[i]))*p[i] - 2*(p[i]*p[i]);
+        new_p[i] = p[i] + dt*dp;
+        new_h[i] = h[i] + 0.5*(p[i] + new_p[i])*dt;
     }
     p = new_p;
     h = new_h;
@@ -284,7 +358,7 @@ vector<vector<vector<double> > > Lattice1D::simulation(int N) {
             }
             mVec[j] = m;
             sVec[j] = s;
-            hVec[j] =  mh; //Gamma*(1.+b*mh) - 1.;
+            hVec[j] = mh; //Gamma*(1.+b*mh) - 1.;
         }
         allM.push_back(mVec);
         allS.push_back(sVec);
@@ -746,4 +820,32 @@ vector<vector<double> > Lattice3D::sim_avg(int N) {
     ret.push_back(myM);
     ret.push_back(myS);
     return ret;
+}
+
+
+double gamma_rand(double shape, double scale, boost::mt19937& rng) {
+    if ((shape <= 0.) || (scale <= 0.) || (shape != shape) || (scale != scale)) {
+        // cout << "GAMMA RET 0\n";
+        // cout << "Gamma shape, scale: " << shape << "\t" << scale << "\n";
+        return 0.;
+    }
+    // assert(shape > 0.);
+    // assert(scale > 0.);
+    boost::gamma_distribution<double> gd(shape);
+    boost::variate_generator<boost::mt19937&, boost::gamma_distribution<double> > var_gamma(rng, gd);
+    double myRet = scale * var_gamma();
+    // if (myRet == 0.) {
+    //     cout << "GAMMA OUTPUT 0\t" << (myRet * 1.e10) << "\n";
+    //     cout << "shape: " << shape << "\n";
+    // }
+    return myRet;
+}
+
+double poiss_rand(double shape, boost::mt19937& rng) {
+    if ((shape <= 0) || (shape != shape)) {
+        return 0.;
+    }
+    boost::poisson_distribution<int, double> pd(shape);
+    boost::variate_generator<boost::mt19937&, boost::poisson_distribution<int, double> > var_poisson(rng, pd);
+    return var_poisson();
 }
