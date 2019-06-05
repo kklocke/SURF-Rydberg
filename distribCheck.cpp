@@ -2,16 +2,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <gsl/gsl_histogram.h>
+#include <string>
 
 using namespace std;
 
-double Gamma = -0.9; // -0.84701;
-double T = 20000.;
+double Gamma = -.9; // -0.84701;
+double T = 800000.;
 double dt = .25;
 double b = -5e-3;
 double po = .0;
 double dx = sqrt(1.5);
-double kappa = 5e-4;
+double kappa = 2.82e-3;
 double exRate = 5e-4;
 int Nsites = 1e5;
 
@@ -43,16 +44,34 @@ vector<int> excitation_sites(int Tmax, double dT, double r, int Nsites, double o
     return sites;
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     /* Part 1:
      * Simulate the system on a 1-D lattice with dx --> infinity so that the sites are decoupled
      * Every few time steps, compute the histogram and plot in gnuplot
      */
+
+    if (argc >= 2) {
+        kappa = atof(argv[1]);
+    }
+    string hFname = "hist_data_";
+    string mFname = "mean_data_";
+    string rhoHM_fname = "rho_data_";
+    string hHM_fname = "h_data_";
+    if (argc >= 3) {
+        hFname += string(argv[2]) + ".txt";
+        mFname += string(argv[2]) + ".txt";
+        rhoHM_fname += string(argv[2]) + ".txt";
+        hHM_fname += string(argv[2]) + ".txt";
+    }
+
     FILE * datFile;
-    datFile = fopen("hist_data.txt", "w");
-    gsl_histogram *h = gsl_histogram_alloc (1000);
+    datFile = fopen(hFname.c_str(), "w");
+    gsl_histogram *h = gsl_histogram_alloc (4000);
     // gsl_histogram_set_ranges_uniform(h, -10., 3.);
-    gsl_histogram_set_ranges_uniform(h, 1, 10);
+    gsl_histogram_set_ranges_uniform(h, 1., 3.5);
+    if (kappa < .0009) {
+        gsl_histogram_set_ranges_uniform(h, 1., 10.);
+    }
     Lattice1D L(T, dt, Gamma, b, po, Nsites, dx, kappa);
     // Lattice1D L;
     vector<vector<double> > trackP;
@@ -71,7 +90,7 @@ int main() {
             double M = 0;
             for (int j = 0; j < Nsites; j++) {
                 // gsl_histogram_increment(h, log10(myP[j] + 1e-9));
-                if (i > 40000) {
+                if (i > 4*30000) {
                     gsl_histogram_increment(h, -Gamma*b*myH[j] + 1 - Gamma + kappa*dt*float(i));
                 }
                 M += myH[j];
@@ -87,20 +106,20 @@ int main() {
         if (i % 4000 == 0) {
             cout << "T: " << float(i)*dt << "\n";
         }
-        // if ((i % 1 == 0) && (i < 32000)) {
-        //     vector<double> tmpP;
-        //     vector<double> tmpH;
-        //     for (int j = 5000; j < 6000; j++) {
-        //         tmpP.push_back(myP[j]);
-        //         tmpH.push_back(myH[j]);
-        //     }
-        //     trackP.push_back(tmpP);
-        //     trackH.push_back(tmpH);
-        //     // myP = L.update();
-        //     myP = L.getP();
-        //     // myP = L.euler_update();
-        //     myH = L.getH();
-        // }
+        //if ((i % 1 == 0) && (i > 4*40000) & (i < 4*0)) {
+        //    vector<double> tmpP;
+        //    vector<double> tmpH;
+        //    for (int j = 50000; j < 51000; j++) {
+        //        tmpP.push_back(myP[j]);
+        //        tmpH.push_back(myH[j]);
+        //    }
+        //    trackP.push_back(tmpP);
+        //    trackH.push_back(tmpH);
+        //    // myP = L.update();
+        //    myP = L.getP();
+        //    // myP = L.euler_update();
+        //    myH = L.getH();
+        //}
         myP = L.update();
         myH = L.getH();
         // if (fabs(i * dt - 1600) < .01) {
@@ -125,13 +144,13 @@ int main() {
     gsl_histogram_free(h);
     fclose(datFile);
     ofstream mFile;
-    mFile.open("mean_data.txt");
+    mFile.open(mFname);
     for (int i = 0; i < int(myM.size()); i++) {
         mFile << myT[i] << "\t" << myM[i] << "\n";
     }
     mFile.close();
     // ofstream pFile;
-    // pFile.open("rho_data.txt");
+    // pFile.open(rhoHM_fname.c_str());
     // for (int i = 0; i < int(trackP.size()); i++) {
     //     for (int j = 0; j < 1000; j++) {
     //         pFile << trackP[i][j] << " ";
@@ -140,9 +159,9 @@ int main() {
     // }
     // pFile.close();
     // ofstream hFile;
-    // hFile.open("h_data.txt");
+    // hFile.open(hHM_fname.c_str());
     // for (int i = 0; i < int(trackH.size()); i++) {
-    //     for (int j = 0; j < 1000; j++) {
+    //    for (int j = 0; j < 1000; j++) {
     //         hFile << trackH[i][j] << " ";
     //     }
     //     hFile << "\n";

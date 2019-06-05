@@ -147,6 +147,7 @@ Lattice1D::Lattice1D() {
     // }
     // random_shuffle(p.begin(), p.end());
     h = vector<double>(Nsites, 0.);
+    pMean = po;
 }
 
 Lattice1D::Lattice1D(double my_Tmax, double my_dt, double my_Gamma, double my_b, double my_po, int my_Nsites, double my_dx, double myKappa) {
@@ -166,6 +167,7 @@ Lattice1D::Lattice1D(double my_Tmax, double my_dt, double my_Gamma, double my_b,
     // }
     // random_shuffle(p.begin(), p.end());
     h = vector<double>(Nsites, 0.);
+    pMean = po;
 }
 
 Lattice1D::~Lattice1D() {}
@@ -192,10 +194,15 @@ void Lattice1D::reset() {
         // }
     }
     random_shuffle(p.begin(), p.end());
+    pMean = po;
 }
 
 vector<double> Lattice1D::getP() {
     return p;
+}
+
+double Lattice1D::getPmean() {
+    return pMean;
 }
 
 void Lattice1D::exciteSite(int site, double seed) {
@@ -211,6 +218,7 @@ vector<double> Lattice1D::update() {
     double Dtilde = 3.;
     vector<double> new_p (Nsites, 0.);
     vector<double> new_h (Nsites, 0.);
+    pMean = 0.;
     for (int i = 0; i < Nsites; i++) {
         double alpha = 0.;
         if (i != 0) {
@@ -237,6 +245,7 @@ vector<double> Lattice1D::update() {
         // pStar /= (1. + pStar * dt * 2.);
         pStar /= (1. + pStar * dt);
         new_p[i] = pStar;
+        pMean += pStar;
         double hStar = h[i] + 0.5*dt*(pStar + p[i]);
         if (i == 0) {
             hStar += dt * Dtilde * h[Nsites - 1] / (dx * dx);
@@ -255,11 +264,69 @@ vector<double> Lattice1D::update() {
         hStar -= 2. * dt * Dtilde*h[i]/(dx*dx);
         new_h[i] = hStar;
     }
+    pMean /= double(Nsites);
     p = new_p;
     h = new_h;
     T += dt;
     return new_p;
 }
+
+vector<double> Lattice1D::tau_update(double tau) {
+    double sigma = sqrt(2.);
+    double Dtilde = 3.;
+    vector<double> new_p(Nsites, 0.);
+    vector<double> new_h(Nsites, 0.);
+    pMean = 0.;
+    for (int i = 0; i < Nsites; i++) {
+        double alpha = 0.;
+        if (i != 0) {
+            alpha += p[i-1];
+        }
+        else {
+            alpha += p[Nsites - 1];
+        }
+        if (i != Nsites - 1) {
+            alpha += p[i+1];
+        }
+        else {
+            alpha += p[0];
+        }
+        alpha /= dx*dx;
+        double beta = 1. + (kappa * T) - Gamma-Gamma*b*h[i] - 2./(dx*dx);
+        alpha -= beta*tau;
+        double lambda = 2.*beta / (exp(beta*dt) - 1.);
+        lambda /= (sigma*sigma);
+        double u = p[i] + tau;
+        double uShape = lambda * u * exp(beta * dt);
+        double uOut = poiss_rand(uShape, rnd_gen2);
+        double gShape = uOut + 2.*alpha / (sigma*sigma);
+        double gOut = gamma_rand(gShape, 1.0, rnd_gen1) / lambda;
+        double uStar = gOut;
+        if (uStar < tau) {
+            uStar = tau;
+        }
+        double pStar = uStar - tau;
+        pStar /= (1. + pStar * dt);
+        new_p[i] = pStar;
+	pMean += pStar;
+        double hStar = h[i] + 0.5*dt*(pStar + p[i]);
+        if (i == 0) {
+            hStar += dt*Dtilde*h[Nsites - 1] / (dx*dx);
+        }
+        else {
+            hStar += dt*Dtilde * h[i-1] / (dx*dx);
+        }
+        hStar += dt*Dtilde*h[abs((i+1)%Nsites)] / (dx*dx);
+        hStar -= 2.*dt*Dtilde*h[i]/(dx*dx);
+        new_h[i] = hStar;
+    }
+    p = new_p;
+    h = new_h;
+    pMean /= double(Nsites);
+    T += dt;
+    return new_p;
+}
+
 
 vector<double> Lattice1D::euler_update() {
     vector<double> new_p(Nsites, 0.);
@@ -284,12 +351,13 @@ vector<double> Lattice1D::euler_update() {
 }
 
 bool Lattice1D::is_zero() {
-    for (int i = 0; i < Nsites; i++) {
-        if (p[i] != 0.) {
-            return false;
-        }
-    }
-    return true;
+    return (pMean == 0.);
+    // for (int i = 0; i < Nsites; i++) {
+    //     if (p[i] != 0.) {
+    //         return false;
+    //     }
+    // }
+    // return true;
 }
 
 vector< vector<double> > Lattice1D::simulation() {
@@ -423,24 +491,28 @@ Lattice2D::Lattice2D() {
     Gamma = .4;
     b = .1;
     po = .01;
+    kappa = 5e-5;
     L = 100;
     Nsites = L * L;
     p = vector<double>(Nsites, po);
     h = vector<double>(Nsites, 0.);
+    pMean = po;
 }
 
-Lattice2D::Lattice2D(double myT, double myDT, double myGamma, double myB, double myPo, int myL, double myDx) {
+Lattice2D::Lattice2D(double myT, double myDT, double myGamma, double myB, double myPo, int myL, double myDx, double myKappa) {
     T = 0.;
     Tmax = myT;
     dt = myDT;
     Gamma = myGamma;
     b = myB;
     po = myPo;
+    kappa = myKappa;
     L = myL;
-    Nsites = L * L * L;
+    Nsites = L*L;
     dx = myDx;
     p = vector<double>(Nsites, po);
     h = vector<double>(Nsites, 0.);
+    pMean = po;
 }
 
 Lattice2D::~Lattice2D() {}
@@ -460,39 +532,77 @@ void Lattice2D::reset() {
     T = 0.;
     p = vector<double>(Nsites,po);
     h = vector<double>(Nsites,0.);
+    pMean = po;
+}
+
+vector<double> Lattice2D::getP() {
+    return p;
+}
+
+double Lattice2D::getPmean() {
+    return pMean;
+}
+
+void Lattice2D::exciteSite(int site, double seed) {
+    p[site] = seed;
+}
+
+vector<double> Lattice2D::getH() {
+    return h;
+}
+
+int Lattice2D::ind(int i, int j) {
+    i = (i % L);
+    j = (j % L);
+    if (i < 0) {
+        i += L;
+    }
+    if (j < 0) {
+        j += L;
+    }
+    int myRes = L*i+j;
+    assert(myRes >= 0);
+    assert(myRes < L*L);
+    return myRes;
 }
 
 vector<double> Lattice2D::update() {
     vector<double> new_p (Nsites, 0.);
     vector<double> new_h (Nsites, 0.);
-
+    double sigma = sqrt(2.);
+    double Dtilde = 3.;
+    pMean = 0.;
     for (int i = 0; i < L; i++) {
         for (int j = 0; j < L; j++) {
-            int ind = i + L*j;
             double alpha = 0.;
-            if (i != 0) {
-                alpha += p[ind -1];
-            }
-            if (i != L-1) {
-                alpha += p[ind + 1];
-            }
-            if (j != 0) {
-                alpha += p[ind - L];
-            }
-            if (j != L-1) {
-                alpha += p[ind + L];
-            }
+            alpha += p[ind(i+1,j)];
+	    alpha += p[ind(i-1,j)];
+	    alpha += p[ind(i,j+1)];
+	    alpha += p[ind(i,j-1)];
             alpha /= (dx*dx);
-            double beta = 1.-Gamma-Gamma*b*h[ind] - 4./(dx*dx);
-            double lambda = 2*beta / (Gamma*Gamma * (exp(beta*dt) - 1));
-            poisson_distribution<int> PoissonDist(lambda * p[ind] * exp(beta*dt));
-            gamma_distribution<double> GammaDist(2*alpha + PoissonDist(generator), 1.0);
-            double pStar = GammaDist(generator) / lambda;
-            pStar /= (1 + pStar * dt * 2);
-            new_p[ind] = pStar;
-            new_h[ind] = h[ind] + .5*dt*(pStar+p[ind]);
+            double beta = 1.+(kappa*T)-Gamma-Gamma*b*h[ind(i,j)] - 4./(dx*dx);
+            double lambda = 2*beta / (sigma*sigma * (exp(beta*dt) - 1));
+	    double pShape = lambda * p[ind(i,j)] * exp(beta*dt);
+	    double pOut = poiss_rand(pShape, rnd_gen2);
+            // poisson_distribution<int> PoissonDist(lambda * p[ind(i,j)] * exp(beta*dt));
+            // gamma_distribution<double> GammaDist(2*alpha + PoissonDist(generator), 1.0);
+            // double pStar = GammaDist(generator) / lambda;
+            double gShape = pOut + 2.*alpha/(sigma*sigma);
+	    double pStar = gamma_rand(gShape, 1.0, rnd_gen1) / lambda;
+	    pStar /= (1 + pStar * dt);
+            // cout << alpha << " " << beta << " " << lambda << " " << pStar << "\n";
+            new_p[ind(i,j)] = pStar;
+	    pMean += pStar;
+	    double hStar = h[ind(i,j)] + 0.5*dt*(pStar + p[ind(i,j)]);
+            hStar += dt*Dtilde*h[ind(i+1,j)]/(dx*dx);
+            hStar += dt*Dtilde*h[ind(i-1,j)]/(dx*dx);
+	    hStar += dt*Dtilde*h[ind(i,j+1)]/(dx*dx);
+	    hStar += dt*Dtilde*h[ind(i,j-1)]/(dx*dx);
+    	    hStar -= 4.*dt*Dtilde*h[ind(i,j)]/(dx*dx);
+            new_h[ind(i,j)] = hStar;
         }
     }
+    pMean /= double(Nsites);
     p = new_p;
     h = new_h;
     T += dt;
@@ -619,28 +729,32 @@ Lattice3D::Lattice3D() {
     T = 0.;
     Tmax = 200;
     dt = .1;
-    dx = 1000.;
+    dx = 1.;
     Gamma = .3;
     b = .01;
     po = .01;
+    kappa = 5e-5;
     L = 30;
     Nsites = L * L * L;
     p = vector<double>(Nsites, po);
     h = vector<double>(Nsites, 0.);
+    pMean = po;
 }
 
-Lattice3D::Lattice3D(double myT, double myDT, double myGamma, double myB, double myPo, int myL, double myDx) {
+Lattice3D::Lattice3D(double myT, double myDT, double myGamma, double myB, double myPo, int myL, double myDx, double myKappa) {
     T = 0.;
     Tmax = myT;
     dt = myDT;
     Gamma = myGamma;
     b = myB;
     po = myPo;
+    kappa = myKappa;
     L = myL;
     Nsites = L * L * L;
     dx = myDx;
     p = vector<double>(Nsites, po);
     h = vector<double>(Nsites, 0.);
+    pMean = po;
 }
 
 Lattice3D::~Lattice3D() {}
@@ -660,47 +774,83 @@ void Lattice3D::reset() {
     T = 0.;
     p = vector<double>(Nsites,po);
     h = vector<double>(Nsites,0.);
+    pMean = po;
+}
+
+vector<double> Lattice3D::getP() {
+    return p;
+}
+
+double Lattice3D::getPmean() {
+    return pMean;
+}
+
+void Lattice3D::exciteSite(int site, double seed) {
+    p[site] = seed;
+}
+
+vector<double> Lattice3D::getH() {
+    return h;
+}
+
+int Lattice3D::ind(int i, int j, int k) {
+    i = (i % L);
+    j = (j % L);
+    k = (k % L);
+    if (i < 0) {
+        i += L;
+    }
+    if (j < 0) {
+        j += L;
+    }
+    if (k < 0) {
+        k += L;
+    }
+    int myRes = L*L*i+L*j+k;
+    assert(myRes >= 0);
+    assert(myRes < L*L*L);
+    return myRes;
 }
 
 vector<double> Lattice3D::update() {
+    double sigma = sqrt(2.);
+    double Dtilde = 3.;
     vector<double> new_p (Nsites, 0.);
     vector<double> new_h (Nsites, 0.);
-
+    pMean = 0.;
     for (int i = 0; i < L; i++) {
         for (int j = 0; j < L; j++) {
             for (int k = 0; k < L; k++) {
-                int ind = i + L*j + L*L*k;
                 double alpha = 0.;
-                if (i != 0) {
-                    alpha += p[ind - 1];
-                }
-                if (i != L - 1) {
-                    alpha += p[ind + 1];
-                }
-                if (j != 0) {
-                    alpha += p[ind - L];
-                }
-                if (j != L - 1) {
-                    alpha += p[ind + L];
-                }
-                if (k != 0) {
-                    alpha += p[ind - L*L];
-                }
-                if (k != L - 1) {
-                    alpha += p[ind + L*L];
-                }
-                alpha /= (dx * dx);
-                double beta = 1. - Gamma - Gamma*b*h[ind] - 6./(dx * dx);
-                double lambda = 2.*beta / (Gamma * Gamma * (exp(beta*dt) - 1));
-                poisson_distribution<int> PoissonDist(lambda * p[ind] * exp(beta*dt));
-                gamma_distribution<double> GammaDist(2*alpha + PoissonDist(generator), 1.0);
-                double pStar = GammaDist(generator) / lambda;
-                pStar /= (1 + pStar * dt * 2);
-                new_p[ind] = pStar;
-                new_h[ind] = h[ind] + .5*dt*(pStar + p[ind]);
+                alpha += p[ind(i+1,j,k)];
+                alpha += p[ind(i-1,j,k)];
+                alpha += p[ind(i,j+1,k)];
+                alpha += p[ind(i,j-1,k)];
+                alpha += p[ind(i,j,k+1)];
+                alpha += p[ind(i,j,k-1)];
+                alpha /= (dx*dx);
+                double beta = 1.+(kappa*T)-Gamma-Gamma*b*h[ind(i,j,k)]-6./(dx*dx);
+                double lambda = 2.*beta / (sigma*sigma *(exp(beta*dt) - 1));
+                double pShape = lambda * p[ind(i,j,k)] * exp(beta*dt);
+                double pOut = poiss_rand(pShape, rnd_gen2);
+                double gShape = pOut + 2.*alpha/(sigma*sigma);
+                double pStar = gamma_rand(gShape, 1., rnd_gen1) / lambda;
+                pStar /= (1 + pStar * dt);
+                new_p[ind(i,j,k)] = pStar;
+                pMean += pStar;
+                double hStar = h[ind(i,j,k)] + 0.5*dt*(pStar + p[ind(i,j,k)]);
+                hStar += dt*Dtilde*h[ind(i+1,j,k)]/(dx*dx);
+                hStar += dt*Dtilde*h[ind(i-1,j,k)]/(dx*dx);
+                hStar += dt*Dtilde*h[ind(i,j+1,k)]/(dx*dx);
+                hStar += dt*Dtilde*h[ind(i,j-1,k)]/(dx*dx);
+                hStar += dt*Dtilde*h[ind(i,j,k+1)]/(dx*dx);
+                hStar += dt*Dtilde*h[ind(i,j,k-1)]/(dx*dx);
+                hStar -= 6.*dt*Dtilde*h[ind(i,j,k)]/(dx*dx);
+                new_h[ind(i,j,k)] = hStar;
             }
         }
     }
+    pMean /= double(Nsites);
     p = new_p;
     h = new_h;
     T += dt;

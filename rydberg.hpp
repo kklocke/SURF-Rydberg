@@ -47,10 +47,12 @@ public:
     vector<vector<double> > sim_avg(int N);
     void exciteSite(int site, double seed);
     vector<double> getP();
+    double getPmean();
     vector<double> getH();
     vector<double> euler_update();
+    vector<double> tau_update(double tau);
 private:
-    double T, Tmax, Gamma, dt, po, dx, b, kappa;
+    double T, Tmax, Gamma, dt, po, dx, b, kappa, pMean;
     int Nsites;
     vector<double> p, h;
 };
@@ -59,7 +61,7 @@ class Lattice2D
 {
 public:
     Lattice2D();
-    Lattice2D(double myT, double myDT, double myGamma, double myB, double myPo, int L, double myDx);
+    Lattice2D(double myT, double myDT, double myGamma, double myB, double myPo, int L, double myDx, double myKappa);
     ~Lattice2D();
     vector <double> getConfig();
     void reset();
@@ -68,8 +70,13 @@ public:
     vector<vector<double> > simulation();
     vector<vector<vector<double> > > simulation(int N);
     vector<vector<double> > sim_avg(int N);
+    void exciteSite(int site, double seed);
+    vector<double> getP();
+    double getPmean();
+    vector<double> getH();
+    int ind(int i, int j);
 private:
-    double T, Tmax, Gamma, dt, po, dx, b;
+    double T, Tmax, Gamma, dt, po, dx, b, kappa, pMean;
     int Nsites, L;
     vector<double> p, h;
 };
@@ -78,7 +85,7 @@ class Lattice3D
 {
 public:
     Lattice3D();
-    Lattice3D(double myT, double myDT, double myGamma, double myB, double myPo, int L, double myDx);
+    Lattice3D(double myT, double myDT, double myGamma, double myB, double myPo, int L, double myDx, double myKappa);
     ~Lattice3D();
     vector <double> getConfig();
     void reset();
@@ -87,8 +94,13 @@ public:
     vector<vector<double> > simulation();
     vector<vector<vector<double> > > simulation(int N);
     vector<vector<double> > sim_avg(int N);
+    void exciteSite(int site, double seed);
+    vector<double> getP();
+    double getPmean();
+    vector<double> getH();
+    int ind(int i, int j, int k);
 private:
-    double T, Tmax, Gamma, dt, po, dx, b;
+    double T, Tmax, Gamma, dt, po, dx, b, kappa, pMean;
     int Nsites, L;
     vector<double> p, h;
 };
