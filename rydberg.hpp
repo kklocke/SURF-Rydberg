@@ -40,6 +40,7 @@ public:
     ~Lattice1D();
     vector <double> getConfig();
     void reset();
+    void set_b(double myB);
     vector<double> update();
     bool is_zero();
     vector<vector<double> > simulation();
@@ -51,6 +52,7 @@ public:
     vector<double> getH();
     vector<double> euler_update();
     vector<double> tau_update(double tau);
+    vector<double> trap_update(double tau, double depth);
 private:
     double T, Tmax, Gamma, dt, po, dx, b, kappa, pMean;
     int Nsites;

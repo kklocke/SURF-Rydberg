@@ -7,14 +7,15 @@
 using namespace std;
 
 double Gamma = -.9; // -0.84701;
-double T = 800000.;
+double T = 12000.;
 double dt = .25;
-double b = -5e-3;
+double b = 0.; // -5e-3;
 double po = .0;
 double dx = sqrt(1.5);
-double kappa = 2.82e-3;
-double exRate = 5e-4;
-int Nsites = 1e5;
+double kappa = 0.; // 2.82e-3;
+double exRate = 1e-5; // 5e-4
+int Nsites = 1e3;
+double trapDepth = 3.;
 
 static int seed1= time(NULL);// 437;
 static int seed2= time(NULL); //4357;
@@ -53,10 +54,10 @@ int main(int argc, char* argv[]) {
     if (argc >= 2) {
         kappa = atof(argv[1]);
     }
-    string hFname = "hist_data_";
-    string mFname = "mean_data_";
-    string rhoHM_fname = "rho_data_";
-    string hHM_fname = "h_data_";
+    string hFname = "/media/kai/TOSHIBA EXT/SURF/Trapping/hist_data_";
+    string mFname = "/media/kai/TOSHIBA EXT/SURF/Trapping/mean_data_";
+    string rhoHM_fname = "/media/kai/TOSHIBA EXT/SURF/Trapping/rho_data_";
+    string hHM_fname = "/media/kai/TOSHIBA EXT/SURF/Trapping/h_data_";
     if (argc >= 3) {
         hFname += string(argv[2]) + ".txt";
         mFname += string(argv[2]) + ".txt";
@@ -82,22 +83,24 @@ int main(int argc, char* argv[]) {
     vector<double> myM;
     vector<double> myT;
 
-    vector<int> toExcite = excitation_sites(T, dt, exRate, Nsites, 0);
+    // vector<int> toExcite = excitation_sites(T, dt, exRate, Nsites, 0);
 
     for (int i = 0; i < nsteps; i++) {
+        if (i == (int)(1000. / dt)) {
+            cout << "setting b\n";
+            L.set_b(5e-3);
+        }
         if (i % 1 == 0) {
             // gsl_histogram_reset(h);
             double M = 0;
             for (int j = 0; j < Nsites; j++) {
                 // gsl_histogram_increment(h, log10(myP[j] + 1e-9));
                 if (i > 4*30000) {
-                    gsl_histogram_increment(h, -Gamma*b*myH[j] + 1 - Gamma + kappa*dt*float(i));
+                    gsl_histogram_increment(h, myH[j]);
                 }
                 M += myH[j];
             }
             M /= float(Nsites);
-            M *= -Gamma*b;
-            M += 1 - Gamma + kappa*dt*float(i);
             myM.push_back(M);
             myT.push_back(float(i)*dt);
             // gsl_histogram_fprintf(datFile, h, "%f", "%f");
@@ -106,21 +109,21 @@ int main(int argc, char* argv[]) {
         if (i % 4000 == 0) {
             cout << "T: " << float(i)*dt << "\n";
         }
-        //if ((i % 1 == 0) && (i > 4*40000) & (i < 4*0)) {
-        //    vector<double> tmpP;
-        //    vector<double> tmpH;
-        //    for (int j = 50000; j < 51000; j++) {
-        //        tmpP.push_back(myP[j]);
-        //        tmpH.push_back(myH[j]);
-        //    }
-        //    trackP.push_back(tmpP);
-        //    trackH.push_back(tmpH);
-        //    // myP = L.update();
-        //    myP = L.getP();
-        //    // myP = L.euler_update();
-        //    myH = L.getH();
-        //}
-        myP = L.update();
+        if ((i % 4 == 0) && (i >= 0*40000) & (i < 4*100000)) {
+           vector<double> tmpP;
+           vector<double> tmpH;
+           for (int j = 0; j < 1000; j++) {
+               tmpP.push_back(myP[j]);
+               tmpH.push_back(myH[j]);
+           }
+           trackP.push_back(tmpP);
+           trackH.push_back(tmpH);
+           // myP = L.update();
+           myP = L.getP();
+           // myP = L.euler_update();
+           myH = L.getH();
+        }
+        myP = L.trap_update(exRate, trapDepth);
         myH = L.getH();
         // if (fabs(i * dt - 1600) < .01) {
         //     L.exciteSite(5500, 1.0);
@@ -129,15 +132,15 @@ int main(int argc, char* argv[]) {
         //     L.exciteSite(5503, 1.0);
         //     L.exciteSite(5504, 1.0);
         // }
-        if (toExcite[i] != -1) {
-            int s = toExcite[i];
-            for (int j = -5; j < 6; j++) {
-                if ((s + j < 0) || (s + j > Nsites)) {
-                    continue;
-                }
-                L.exciteSite(s+j, 1.);
-            }
-        }
+        // if (toExcite[i] != -1) {
+        //     int s = toExcite[i];
+        //     for (int j = -5; j < 6; j++) {
+        //         if ((s + j < 0) || (s + j > Nsites)) {
+        //             continue;
+        //         }
+        //         L.exciteSite(s+j, 1.);
+        //     }
+        // }
     }
     gsl_histogram_fprintf(datFile, h, "%f", "%f");
     // fprintf(datFile, "TIME: %f\n", float(i)*dt);
@@ -149,24 +152,24 @@ int main(int argc, char* argv[]) {
         mFile << myT[i] << "\t" << myM[i] << "\n";
     }
     mFile.close();
-    // ofstream pFile;
-    // pFile.open(rhoHM_fname.c_str());
-    // for (int i = 0; i < int(trackP.size()); i++) {
-    //     for (int j = 0; j < 1000; j++) {
-    //         pFile << trackP[i][j] << " ";
-    //     }
-    //     pFile << "\n";
-    // }
-    // pFile.close();
-    // ofstream hFile;
-    // hFile.open(hHM_fname.c_str());
-    // for (int i = 0; i < int(trackH.size()); i++) {
-    //    for (int j = 0; j < 1000; j++) {
-    //         hFile << trackH[i][j] << " ";
-    //     }
-    //     hFile << "\n";
-    // }
-    // hFile.close();
+    ofstream pFile;
+    pFile.open(rhoHM_fname.c_str());
+    for (int i = 0; i < int(trackP.size()); i++) {
+        for (int j = 0; j < 1000; j++) {
+            pFile << trackP[i][j] << " ";
+        }
+        pFile << "\n";
+    }
+    pFile.close();
+    ofstream hFile;
+    hFile.open(hHM_fname.c_str());
+    for (int i = 0; i < int(trackH.size()); i++) {
+       for (int j = 0; j < 1000; j++) {
+            hFile << trackH[i][j] << " ";
+        }
+        hFile << "\n";
+    }
+    hFile.close();
 
     return 0;
 }

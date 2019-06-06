@@ -146,7 +146,7 @@ Lattice1D::Lattice1D() {
     //     p[j] = .99;
     // }
     // random_shuffle(p.begin(), p.end());
-    h = vector<double>(Nsites, 0.);
+    h = vector<double>(Nsites, 1.5);
     pMean = po;
 }
 
@@ -167,6 +167,12 @@ Lattice1D::Lattice1D(double my_Tmax, double my_dt, double my_Gamma, double my_b,
     // }
     // random_shuffle(p.begin(), p.end());
     h = vector<double>(Nsites, 0.);
+    for (int i = int(Nsites/4); i < int(3*Nsites/4);i++) {
+        h[i] = 1.5;
+        if (i % 2 == 0) {
+            h[i] += pow(-1.,int(i/2))*.1;
+        }
+    }
     pMean = po;
 }
 
@@ -327,6 +333,83 @@ vector<double> Lattice1D::tau_update(double tau) {
     return new_p;
 }
 
+void Lattice1D::set_b(double myB) {
+    b = myB;
+}
+
+vector<double> potential_grad(vector<double> x) {
+    int N = (int)x.size();
+    vector<double> res(N,0.);
+    vector<double> F(N,0.);
+    float mu = (float)(float(N)/2.);
+    float sigma = mu/2.;
+    for (int i = 0; i < N; i++) {
+        float pos = (float)i - mu;
+
+        F[i] = (pos / (sigma*sigma)) * exp(-(pos*pos) / (2*sigma*sigma));
+    }
+    for (int i = 1; i < N-1; i++) {
+        res[i] = x[i]*F[i] - x[i+1]*F[i+1];
+    }
+    res[0] = 2*res[1] - res[2];
+    res[N-1] = 2*res[N-2] - res[N-3];
+    return res;
+}
+
+vector<double> Lattice1D::trap_update(double tau, double depth) {
+    double sigma = sqrt(2.);
+    double Dtilde = .2;
+    vector<double> new_p(Nsites, 0.);
+    vector<double> new_h(Nsites, 0.);
+    pMean = 0.;
+    vector<double> forceTerm = potential_grad(h);
+    for (int i = 0; i < Nsites; i++) {
+        double alpha = 0.;
+        // double beta = 1. - Gamma - h[i];
+        double beta = .5*h[i] - 2.*tau - Gamma;
+        if (i != 0) {
+            alpha += p[i-1];
+            beta -= 1./(dx * dx);
+        }
+        if (i != Nsites - 1) {
+            alpha += p[i+1];
+            beta -= 1./(dx * dx);
+        }
+        alpha /= (dx*dx);
+        alpha += tau*h[i];
+        alpha -= beta * tau;
+        double lambda = 2.*beta / (exp(beta * dt) - 1.);
+        lambda /= (sigma * sigma);
+        double u = p[i] + tau;
+        double uShape = lambda * u * exp(beta * dt);
+        double uOut = poiss_rand(uShape, rnd_gen2);
+        double gShape = uOut + 2.*alpha / (sigma * sigma);
+        double gOut = gamma_rand(gShape, 1.0, rnd_gen1) / lambda;
+        double uStar = gOut;
+        if (uStar < tau) {
+            uStar = tau;
+        }
+        double pStar = uStar - tau;
+        pStar /= (1. + pStar * dt);
+        new_p[i] = pStar;
+        pMean += pStar;
+        double hStar = h[i] - b*0.5*dt*(pStar + p[i]);
+        if (i != 0) {
+            hStar += dt*Dtilde*h[i-1]/(dx*dx);
+            hStar -= dt*Dtilde*h[i]/(dx*dx);
+        }
+        if (i != Nsites - 1) {
+            hStar += dt*Dtilde*h[i+1]/(dx*dx);
+            hStar -= dt*Dtilde*h[i]/(dx*dx);
+        }
+        new_h[i] = hStar - depth * forceTerm[i];
+    }
+    p = new_p;
+    h = new_h;
+    pMean /= double(Nsites);
+    T += dt;
+    return new_p;
+}
 
 vector<double> Lattice1D::euler_update() {
     vector<double> new_p(Nsites, 0.);
