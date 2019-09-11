@@ -356,13 +356,25 @@ vector<double> potential_grad(vector<double> x) {
     return res;
 }
 
+vector<double> potential_drive(int N) {
+    vector<double> res(N,0.);
+    float mu = (float)(float(N)/2.);
+    float sigma = mu/2.;
+    for (int i = 0; i < N; i++) {
+        float pos = (float)i - mu;
+        res[i] = exp(-(pos*pos)/(2*sigma*sigma));
+    }
+    return res;
+}
+
 vector<double> Lattice1D::trap_update(double tau, double depth) {
     double sigma = sqrt(2.);
-    double Dtilde = .2;
+    double Dtilde = kappa;
     vector<double> new_p(Nsites, 0.);
     vector<double> new_h(Nsites, 0.);
     pMean = 0.;
     vector<double> forceTerm = potential_grad(h);
+    vector<double> driveTerm = potential_drive(Nsites);
     for (int i = 0; i < Nsites; i++) {
         double alpha = 0.;
         // double beta = 1. - Gamma - h[i];
@@ -402,7 +414,7 @@ vector<double> Lattice1D::trap_update(double tau, double depth) {
             hStar += dt*Dtilde*h[i+1]/(dx*dx);
             hStar -= dt*Dtilde*h[i]/(dx*dx);
         }
-        new_h[i] = hStar - depth * forceTerm[i];
+        new_h[i] = hStar - depth * forceTerm[i]; //  + dt*kappa*driveTerm[i];
     }
     p = new_p;
     h = new_h;
@@ -595,6 +607,11 @@ Lattice2D::Lattice2D(double myT, double myDT, double myGamma, double myB, double
     dx = myDx;
     p = vector<double>(Nsites, po);
     h = vector<double>(Nsites, 0.);
+    for (int x = int(L/3); x < int(2*L/3); x++) {
+        for (int y = int(L/3); y < int(2*L/3); y++) {
+            h[ind(x,y)] = 1.5;
+        }
+    }
     pMean = po;
 }
 
@@ -609,6 +626,10 @@ vector<double> Lattice2D::getConfig() {
     my_config.push_back(dx);
     my_config.push_back(L);
     return my_config;
+}
+
+void Lattice2D::set_b(double myB) {
+    b = myB;
 }
 
 void Lattice2D::reset() {
@@ -646,6 +667,21 @@ int Lattice2D::ind(int i, int j) {
     int myRes = L*i+j;
     assert(myRes >= 0);
     assert(myRes < L*L);
+    return myRes;
+}
+
+int ind_2D(int i, int j, int L) {
+    i = (i % L);
+    j = (j % L);
+    if (i < 0) {
+        i += L;
+    }
+    if (j < 0) {
+        j += L;
+    }
+    int myRes = L*i + j;
+    assert(myRes >= 0);
+    assert(myRes < L * L);
     return myRes;
 }
 
@@ -699,6 +735,117 @@ bool Lattice2D::is_zero() {
         }
     }
     return true;
+}
+
+vector<double> potential_grad_2D(vector<double> myX, int N, int L) {
+    vector<double> res(N,0.);
+    vector<double> Fx(N,0.);
+    vector<double> Fy(N,0.);
+    float mu = (float)(float(L) / 2.);
+    float sigma = mu / 2.;
+    for (int i = 0; i < N; i++) {
+        float x = (float)((int) i/L);
+        float y = (float)(i % L);
+        float posx = x - mu;
+        float posy = y - mu;
+        float posr = sqrt(posx * posx + posy * posy);
+        float expFac = exp(-(posr * posr) / (2*sigma * sigma));
+        int ix = (int)x;
+        int iy = (int)y;
+        float dxh = 0.;
+        float dyh = 0.;
+        if (ix == 0) {
+            dxh = myX[ind_2D(ix+1,iy,L)] - myX[i];
+        } else if (ix == (L-1)) {
+            dxh = myX[i] - myX[ind_2D(ix-1,iy,L)];
+        } else {
+            dxh = 0.5*(myX[ind_2D(ix+1,iy,L)] - myX[ind_2D(ix-1,iy,L)]);
+        }
+        if (iy == 0) {
+            dyh = myX[ind_2D(ix,iy+1,L)] - myX[i];
+        } else if (iy == (L-1)) {
+            dyh = myX[i] - myX[ind_2D(ix,iy-1,L)];
+        } else {
+            dyh = 0.5*(myX[ind_2D(ix,iy+1,L)] - myX[ind_2D(ix,iy-1,L)]);
+        }
+        float tmp = dxh*(-posx) + dyh*(-posy) + myX[i]*(-2 + (posr * posr)/(sigma * sigma));
+        res[i] = tmp * expFac / (sigma*sigma);
+    }
+    return res;
+}
+
+vector<double> Lattice2D::trap_update(double tau, double depth) {
+    double sigma = sqrt(2.);
+    double Dtilde = kappa;
+    double Dp = .2;
+    vector<double> new_p(Nsites, 0.);
+    vector<double> new_h(Nsites, 0.);
+    // p[ind(i,j)], use L
+    pMean = 0.;
+    vector<double> forceTerm = potential_grad_2D(h, Nsites, L);
+    for (int i = 0; i < Nsites; i++) {
+        double alpha = 0.;
+        double beta = .5*h[i] - 2.*tau - Gamma; // check dimensionality here
+        int x = int(i / L);
+        int y = i % L;
+        if (x != 0) {
+            alpha += p[ind(x-1, y)];
+            beta -= Dp/(dx * dx);
+        }
+        if (x != L - 1) {
+            alpha += p[ind(x+1,y)];
+            beta -= Dp/(dx * dx);
+        }
+        if (y != 0) {
+            alpha += p[ind(x, y-1)];
+            beta -= Dp/(dx * dx);
+        }
+        if (y != L - 1) {
+            alpha += p[ind(x,y+1)];
+            beta -= Dp/(dx * dx);
+        }
+        alpha *= Dp/(dx * dx);
+        alpha += tau*h[i];
+        alpha -= beta * tau;
+        double lambda = 2.*beta / (exp(beta * dt) - 1.);
+        lambda /= (sigma * sigma);
+        double u = p[i] + tau;
+        double uShape = lambda * u * exp(beta * dt);
+        double uOut = poiss_rand(uShape, rnd_gen2);
+        double gShape = uOut + 2.*alpha / (sigma * sigma);
+        double gOut = gamma_rand(gShape, 1.0, rnd_gen1) / lambda;
+        double uStar = gOut;
+        if (uStar < tau) {
+            uStar = tau;
+        }
+        double pStar = uStar - tau;
+        pStar /= (1. + pStar * dt);
+        new_p[i] = pStar;
+        pMean += pStar;
+        double hStar = h[i] - b * 0.5 * dt * (pStar + p[i]);
+        if (x != 0) {
+            hStar += dt * Dtilde * h[ind(x-1,y)] / (dx * dx);
+            hStar -= dt * Dtilde * h[i] / (dx * dx);
+        }
+        if (x != L-1) {
+            hStar += dt * Dtilde * h[ind(x+1,y)] / (dx * dx);
+            hStar -= dt * Dtilde * h[i] / (dx * dx);
+        }
+        if (y != 0) {
+            hStar += dt * Dtilde * h[ind(x,y-1)] / (dx * dx);
+            hStar -= dt * Dtilde * h[i] / (dx * dx);
+        }
+        if (y != L-1) {
+            hStar += dt * Dtilde * h[ind(x,y+1)] / (dx * dx);
+            hStar -= dt * Dtilde * h[i] / (dx * dx);
+        }
+        new_h[i] = hStar - depth * forceTerm[i];
+    }
+    p = new_p;
+    h = new_h;
+    pMean /= double(Nsites);
+    T += dt;
+    return new_p;
 }
 
 vector< vector<double> > Lattice2D::simulation() {
@@ -948,6 +1095,169 @@ bool Lattice3D::is_zero() {
     }
     return true;
 }
+
+/* int ind_3D(int i, int j, int k, int L) {
+    i = (i % L);
+    j = (j % L);
+    k = (k % L);
+    if (i < 0) {
+        i += L;
+    }
+    if (j < 0) {
+        j += L;
+    }
+    if (k < 0) {
+        k += L;
+    }
+    int myRes = L*L*i + L*j + k;
+    assert (myRes >= 0);
+    assert (myRes < L^3);
+    return myRes;
+}
+
+vector<double> potential_grad_3D(vector<double> myX, int N, int L) {
+    vector<double> res(N,0.);
+    vector<double> Fx(N,0.);
+    vector<double> Fy(N,0.);
+    vector<double> Fz(N,0.);
+    float mu = float(L) / 2.;
+    float sigma = mu / 3.;
+    for (int i = 0; i < N; i++) {
+        float x = float(i / L^2);
+        float y = float((i % L^2)/L);
+        float z = float(i % L);
+        float posx = x - mu;
+        float posy = y - mu;
+        float posz = z - mu;
+        float posr2 = posx*posx + posy*posy + posz*posz;
+        float expFac = exp(-posr2 / (2. * sigma * sigma));
+        int ix = (int)x;
+        int iy = (int)y;
+        int iz = (int)z;
+
+        if (ix == 0) {
+            dxh = myX[ind_3D(ix+1,iy,iz,L)] - myX[i];
+        } else if (ix == (L-1)) {
+            dxh = myX[i] - myX[ind_3D(ix-1,iy,iz,L)];
+        } else {
+            dxh = 0.5*(myX[ind_3D(ix+1,iy,iz,L)] - myX[ind_3D(ix-1,iy,iz,L)]);
+        }
+
+        if (iy == 0) {
+            dyh = myX[ind_3D(ix,iy+1,iz,L)] - myX[i];
+        } else if (iy == (L-1)) {
+            dyh = myX[i] - myX[ind_3D(ix,iy-1,iz,L)];
+        } else {
+            dyh = 0.5*(myX[ind_3D(ix,iy+1,iz,L)] - myX[ind_3D(ix,iy-1,iz,L)]);
+        }
+
+        if (iz == 0) {
+            dzh = myX[ind_3D(ix,iy,iz+1,L)] - myX[i];
+        } else if (iz == (L-1)) {
+            dzh = myX[i] - myX[ind_3D(ix,iy,iz-1,L)];
+        } else {
+            dzh = 0.5*(myX[ind_3D(ix,iy,iz+1,L)] - myX[ind_3D(ix,iy,iz-1,L)]);
+        }
+
+        float tmp = -dxh*posx - dyh*posy - dyz*posz + myX[i]*(-2 + posr2 / (sigma*sigma));
+        res[i] = tmp * expFac / (sigma * sigma);
+    }
+    return res;
+}
+
+
+
+
+vector<double> Lattice3D::trap_update(double tau, double depth) {
+    double sigma = sqrt(2.);
+    double Dtilde = kappa;
+    double Dp = .2;
+    vector<double> new_p(Nsites, 0.);
+    vector<double> new_h(Nsites, 0.);
+    pMean = 0.;
+    vector<double> forceTerm = potential_grad_2D(h, Nsites, L);
+    for (int i = 0; i < Nsites; i++) {
+        double alpha = 0.;
+        double beta = .5*h[i] - 2.*tau - Gamma; // check dimensionality here
+        int x = int(i / L^2);
+        int y = int((i % L^2) / L);
+        int z = int(i % L);
+        if (x != 0) {
+            alpha += p[ind_3D(x-1,y,z,L)];
+            beta -= Dp/(dx * dx);
+        }
+        if (x != L - 1) {
+            alpha += p[ind_3D(x+1,y,z,L)];
+            beta -= Dp/(dx * dx);
+        }
+        if (y != 0) {
+            alpha += p[ind_3D(x,y-1,z,L)];
+            beta -= Dp/(dx * dx);
+        }
+        if (y != L - 1) {
+            alpha += p[ind_3D(x,y+1,z,L)];
+            beta -= Dp/(dx * dx);
+        }
+        if (z != 0) {
+            alpha += p[ind_3D(x,y,z-1,L)];
+            beta -= Dp/(dx * dx);
+        }
+        if (z != L - 1) {
+            alpha += p[ind_3D(x,y,z+1,L)];
+            beta -= Dp/(dx * dx);
+        }
+        alpha *= Dp/(dx * dx);
+        alpha += tau*h[i];
+        alpha -= beta * tau;
+        double lambda = 2.*beta / (exp(beta * dt) - 1.);
+        lambda /= (sigma * sigma);
+        double u = p[i] + tau;
+        double uShape = lambda * u * exp(beta * dt);
+        double uOut = poiss_rand(uShape, rnd_gen2);
+        double gShape = uOut + 2.*alpha / (sigma * sigma);
+        double gOut = gamma_rand(gShape, 1.0, rnd_gen1) / lambda;
+        double uStar = gOut;
+        if (uStar < tau) {
+            uStar = tau;
+        }
+        double pStar = uStar - tau;
+        pStar /= (1. + pStar * dt);
+        new_p[i] = pStar;
+        pMean += pStar;
+        double hStar = h[i] - b * 0.5 * dt * (pStar + p[i]);
+        if (x != 0) {
+            hStar += dt * Dtilde * h[ind_3D(x-1,y,z,L)] / (dx * dx);
+            hStar -= dt * Dtilde * h[i] / (dx * dx);
+        }
+        if (x != L-1) {
+            hStar += dt * Dtilde * h[ind_3D(x+1,y,z,L)] / (dx * dx);
+            hStar -= dt * Dtilde * h[i] / (dx * dx);
+        }
+        if (y != 0) {
+            hStar += dt * Dtilde * h[ind_3D(x,y-1,z,L)] / (dx * dx);
+            hStar -= dt * Dtilde * h[i] / (dx * dx);
+        }
+        if (y != L-1) {
+            hStar += dt * Dtilde * h[ind_3D(x,y+1,z,L)] / (dx * dx);
+            hStar -= dt * Dtilde * h[i] / (dx * dx);
+        }
+        if (z != 0) {
+            hStar += dt * Dtilde * h[ind_3D(x,y,z-1,L)] / (dx * dx);
+            hStar -= dt * Dtilde * h[i] / (dx * dx);
+        }
+        if (z != L-1) {
+            hStar += dt * Dtilde * h[ind_3D(x,y,z+1,L)] / (dx * dx);
+            hStar -= dt * Dtilde * h[i] / (dx * dx);
+        }
+        new_h[i] = hStar - depth * forceTerm[i];
+    }
+    p = new_p;
+    h = new_h;
+    pMean /= double(Nsites);
+    T += dt;
+    return new_p;
+} */
+
 
 vector< vector<double> > Lattice3D::simulation() {
     int N = int(Tmax / dt);

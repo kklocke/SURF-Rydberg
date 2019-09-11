@@ -68,6 +68,7 @@ public:
     vector <double> getConfig();
     void reset();
     vector<double> update();
+    vector<double> trap_update(double tau, double depth);
     bool is_zero();
     vector<vector<double> > simulation();
     vector<vector<vector<double> > > simulation(int N);
@@ -76,6 +77,7 @@ public:
     vector<double> getP();
     double getPmean();
     vector<double> getH();
+    void set_b(double myB);
     int ind(int i, int j);
 private:
     double T, Tmax, Gamma, dt, po, dx, b, kappa, pMean;
