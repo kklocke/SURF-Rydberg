@@ -7,16 +7,18 @@
 using namespace std;
 
 double Gamma = -.9; // -0.84701;
-double T = 120000.;
+double T = 300000.;
 double dt = .25;
 double b = 0.; // -5e-3;
 double po = .0;
 double dx = 1.; // sqrt(1.5)
 double kappa = 0.; // 2.82e-3;
-double exRate = 1e-3; // 5e-4
+double exRate = 5e-4; // 5e-4
 double useTau = 0.;
-int myL = 200;
+int myL = 400;
 int Nsites = myL*myL; // 5e3;
+// int myL = 500;
+// int Nsites = myL;
 double trapDepth = 1.;
 
 static int seed1= time(NULL);// 437;
@@ -73,12 +75,12 @@ int main(int argc, char* argv[]) {
         projy_fname += string(argv[2]) + "_2D.txt";
         std_fname += string(argv[2]) + "_2D.txt";
     }
-
+    int cutOffTime = 6000;
     if (argc >= 5) {
         trapDepth = atof(argv[3]);
-        // Gamma = atof(argv[4]);
+        exRate = atof(argv[4]);
         // exRate = .0000001;
-	exRate = atof(argv[4]);
+        // cutOffTime = atoi(argv[4]);
     }
 
     FILE * datFile;
@@ -91,7 +93,6 @@ int main(int argc, char* argv[]) {
     }
     // Lattice1D L(T, dt, Gamma, b, po, Nsites, dx, kappa);
     Lattice2D L(T, dt, Gamma, b, po, myL, dx, kappa);
-    // Lattice1D L;
     vector<vector<double> > trackP;
     vector<vector<double> > trackH;
     vector<vector<double> > trackHx;
@@ -100,29 +101,38 @@ int main(int argc, char* argv[]) {
     vector<double> myP = L.getP();
     vector<double> myH = L.getH();
     vector<double> myM;
+    vector<double> myMH;
     vector<double> myT;
+    vector<double> myS;
 
     // vector<int> toExcite = excitation_sites(T, dt, exRate, Nsites, 0);
 
     for (int i = 0; i < nsteps; i++) {
         if (i == (int)(4000. / dt)) {
             cout << "setting b\n";
-            L.set_b(exRate);
-            useTau = .0000001;
-            // useTau = exRate;
+            L.set_b(.005);
+            useTau = exRate;
         }
+        /* if (i == (int)(float(cutOffTime) / dt)) {
+            L.set_b(.0);
+            useTau = 0.;
+        } */
         if (i % 1 == 0) {
             // gsl_histogram_reset(h);
             double M = 0;
+            double Mh = 0;
             for (int j = 0; j < Nsites; j++) {
                 // gsl_histogram_increment(h, log10(myP[j] + 1e-9));
                 if (i > 4*30000) {
                     gsl_histogram_increment(h, myH[j]);
                 }
                 M += myP[j];
+                Mh += myH[j];
             }
             M /= float(Nsites);
+            Mh /= float(Nsites);
             myM.push_back(M);
+            myMH.push_back(Mh);
             myT.push_back(float(i)*dt);
             // gsl_histogram_fprintf(datFile, h, "%f", "%f");
             // fprintf(datFile, "TIME: %f\n", float(i)*dt);
@@ -131,29 +141,46 @@ int main(int argc, char* argv[]) {
             cout << "T: " << float(i)*dt << "\n";
         }
         if ((i % 8 == 0) && (i >= 4*4000) & (i < 4*1000000)) {
-           // vector<double> tmpP;
-           // vector<double> tmpH;
+           vector<double> tmpH;
            vector<double> tmpHx(myL,0.);
            vector<double> tmpHy(myL,0.);
-           /* for (int i1 = 50; i1 < 150; i1++) {
-               for (int i2 = 50; i2 < 150; i2++) {
-                   tmpP.push_back(myP[myL*i1+i2]);
+           if (L.getPmean() > 1e-4) {
+               vector<double> tmpP;
+               tmpP.push_back(i*dt);
+               for (int i1 = 100; i1 < 300; i1++) {
+                   for (int i2 = 100; i2 < 300; i2++) {
+                       tmpP.push_back(myP[myL*i1+i2]);
+                   }
                }
-           } */
+               trackP.push_back(tmpP);
+           }
+           double tmpSS;
+           double tmpS;
            // for (int j = 0; j < Nsites; j++) {
-           //     tmpP.push_back(myP[j]);
+           //     // tmpP.push_back(myP[j]);
            //     // tmpH.push_back(myH[j]);
+           //     tmpS += myH[j];
+           //     tmpSS += myH[j]*pow(float(j) - float(Nsites / 2.), 2);
            // }
-           for (int i1 = 0; i1 < myL; i1++) {
+           for (int j1 = 0; j1 < myL; j1++) {
+               for (int j2 = 0; j2 < myL; j2++) {
+                   tmpS += myH[j1*myL + j2];
+                   tmpSS += myH[j1*myL + j2]*(pow(float(j1) - float(myL)/2., 2) + pow(float(j2) - float(myL)/2.,2));
+               }
+           }
+           myS.push_back(sqrt(tmpSS / tmpS));
+
+           /* for (int i1 = 0; i1 < myL; i1++) {
                for (int i2 = 0; i2 < myL; i2++) {
                    int tmpInd = myL*i1 + i2;
                    tmpHx[i1] += myH[tmpInd] / float(myL);
                    tmpHy[i2] += myH[tmpInd] / float(myL);
                }
-           }
-           // trackP.push_back(tmpP);
-           trackHx.push_back(tmpHx);
-           trackHy.push_back(tmpHy);
+           } */
+
+           // trackHx.push_back(tmpHx);
+           // trackHy.push_back(tmpHy);
+
            // trackH.push_back(tmpH);
            // myP = L.update();
            // myP = L.getP();
@@ -186,18 +213,19 @@ int main(int argc, char* argv[]) {
     ofstream mFile;
     mFile.open(mFname);
     for (int i = 0; i < int(myM.size()); i++) {
-        mFile << myT[i] << "\t" << myM[i] << "\n";
+        mFile << myT[i] << "\t" << myM[i] << "\t" << myMH[i] << "\n";
     }
     mFile.close();
-    /* ofstream pFile;
+    ofstream pFile;
     pFile.open(rhoHM_fname.c_str());
     for (int i = 0; i < int(trackP.size()); i++) {
+        // for (int j = 100; j < 400; j++) {
         for (int j = 0; j < int(trackP[i].size()); j++) {
             pFile << trackP[i][j] << " ";
         }
         pFile << "\n";
     }
-    pFile.close(); */
+    pFile.close();
     /* ofstream hFile;
     hFile.open(hHM_fname.c_str());
     for (int i = 0; i < int(trackH.size()); i++) {
@@ -207,7 +235,7 @@ int main(int argc, char* argv[]) {
         hFile << "\n";
     }
     hFile.close(); */
-    vector<double> sx(trackHx.size(),0.);
+    /* vector<double> sx(trackHx.size(),0.);
     vector<double> sy(trackHy.size(),0.);
     ofstream hxFile;
     hxFile.open(projx_fname.c_str());
@@ -238,11 +266,12 @@ int main(int argc, char* argv[]) {
         sy[i] = sqrt(myStdSum / mySum);
         hyFile << "\n";
     }
-    hyFile.close();
+    hyFile.close(); */
     ofstream stdFile;
     stdFile.open(std_fname.c_str());
-    for (int i = 0; i < int(sx.size()); i++) {
-        stdFile << sx[i] << " " << sy[i] << "\n";
+    for (int i = 0; i < int(myS.size()); i++) {
+        stdFile << myS[i] << "\n";
+        // stdFile << sx[i] << " " << sy[i] << "\n";
     }
     stdFile.close();
     return 0;

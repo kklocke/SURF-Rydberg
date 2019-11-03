@@ -1,6 +1,6 @@
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -I /usr/local/boost_1_67_0 -I/home/lloydhouse123/gsl/include
-LDFLAGS = -L/home/lloydhouse123/gsl/lib -lm -lgsl -lgslcblas
+CXXFLAGS = -std=c++11 -Wall -I /usr/local/boost_1_67_0 -I/home/lloydhouse321/gsl/include
+LDFLAGS = -L/home/lloydhouse321/gsl/lib -lm -lgsl -lgslcblas
 DEPS = rydberg.hpp
 OBJ1 = rydberg.o run_sim.o
 OBJ2 = rydberg.o distribCheck.o

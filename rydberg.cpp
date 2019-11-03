@@ -167,7 +167,7 @@ Lattice1D::Lattice1D(double my_Tmax, double my_dt, double my_Gamma, double my_b,
     // }
     // random_shuffle(p.begin(), p.end());
     h = vector<double>(Nsites, 0.);
-    for (int i = int(Nsites/4); i < int(3*Nsites/4);i++) {
+    for (int i = int(Nsites/3); i < int(2*Nsites/3);i++) {
         h[i] = 1.5;
         if (i % 2 == 0) {
             h[i] += pow(-1.,int(i/2))*.1;
@@ -342,7 +342,7 @@ vector<double> potential_grad(vector<double> x) {
     vector<double> res(N,0.);
     vector<double> F(N,0.);
     float mu = (float)(float(N)/2.);
-    float sigma = mu/2.;
+    float sigma = mu/2;
     for (int i = 0; i < N; i++) {
         float pos = (float)i - mu;
 
@@ -359,7 +359,7 @@ vector<double> potential_grad(vector<double> x) {
 vector<double> potential_drive(int N) {
     vector<double> res(N,0.);
     float mu = (float)(float(N)/2.);
-    float sigma = mu/2.;
+    float sigma = mu/2;
     for (int i = 0; i < N; i++) {
         float pos = (float)i - mu;
         res[i] = exp(-(pos*pos)/(2*sigma*sigma));
@@ -370,6 +370,7 @@ vector<double> potential_drive(int N) {
 vector<double> Lattice1D::trap_update(double tau, double depth) {
     double sigma = sqrt(2.);
     double Dtilde = kappa;
+    double Dp = 1.;
     vector<double> new_p(Nsites, 0.);
     vector<double> new_h(Nsites, 0.);
     pMean = 0.;
@@ -381,13 +382,13 @@ vector<double> Lattice1D::trap_update(double tau, double depth) {
         double beta = .5*h[i] - 2.*tau - Gamma;
         if (i != 0) {
             alpha += p[i-1];
-            beta -= 1./(dx * dx);
+            beta -= Dp/(dx * dx);
         }
         if (i != Nsites - 1) {
             alpha += p[i+1];
-            beta -= 1./(dx * dx);
+            beta -= Dp/(dx * dx);
         }
-        alpha /= (dx*dx);
+        alpha *= Dp/(dx*dx);
         alpha += tau*h[i];
         alpha -= beta * tau;
         double lambda = 2.*beta / (exp(beta * dt) - 1.);
