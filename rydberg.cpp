@@ -775,6 +775,88 @@ vector<double> potential_grad_2D(vector<double> myX, int N, int L) {
     return res;
 }
 
+vector<double> Lattice2D::seeding_update(double tau, double depth) {
+    double sigma = sqrt(2.);
+    double Dtilde = kappa;
+    double Dp = .2;
+    vector<double> new_p(Nsites, 0.);
+    vector<double> new_h(Nsites, 0.);
+    double old_pMean = pMean;
+    pMean = 0.;
+    vector<double> forceTerm = potential_grad_2D(h,Nsites,L);
+    for (int i = 0; i < Nsites; i++) {
+        double alpha = 0.;
+        double beta = .5*h[i] - Gamma; // - 2.*tau - Gamma;
+        int x = int(i / L);
+        int y = i % L;
+        if (x != 0) {
+            alpha += p[ind(x-1, y)];
+            beta -= Dp/(dx * dx);
+        }
+        if (x != L - 1) {
+            alpha += p[ind(x+1,y)];
+            beta -= Dp/(dx * dx);
+        }
+        if (y != 0) {
+            alpha += p[ind(x, y-1)];
+            beta -= Dp/(dx * dx);
+        }
+        if (y != L - 1) {
+            alpha += p[ind(x,y+1)];
+            beta -= Dp/(dx * dx);
+        }
+        alpha *= Dp/(dx * dx);
+        // alpha += tau*h[i];
+        // alpha -= beta * tau;
+        double lambda = 2.*beta / (exp(beta * dt) - 1.);
+        lambda /= (sigma * sigma);
+        double pShape = lambda * p[i] * exp(beta * dt);
+        double pOut = poiss_rand(pShape, rnd_gen2);
+        double gShape = pOut + 2.*alpha / (sigma * sigma);
+        double gOut = gamma_rand(gShape, 1.0, rnd_gen1) / lambda;
+        double pStar = gOut;
+        if (pStar < 0) {
+            pStar = 0.;
+        }
+        pStar /= (1. + pStar * dt);
+        new_p[i] = pStar;
+        pMean += pStar;
+        double hStar = h[i] - b * 0.5 * dt * (pStar + p[i]);
+        if (x != 0) {
+            hStar += dt * Dtilde * h[ind(x-1,y)] / (dx * dx);
+            hStar -= dt * Dtilde * h[i] / (dx * dx);
+        }
+        if (x != L-1) {
+            hStar += dt * Dtilde * h[ind(x+1,y)] / (dx * dx);
+            hStar -= dt * Dtilde * h[i] / (dx * dx);
+        }
+        if (y != 0) {
+            hStar += dt * Dtilde * h[ind(x,y-1)] / (dx * dx);
+            hStar -= dt * Dtilde * h[i] / (dx * dx);
+        }
+        if (y != L-1) {
+            hStar += dt * Dtilde * h[ind(x,y+1)] / (dx * dx);
+            hStar -= dt * Dtilde * h[i] / (dx * dx);
+        }
+        new_h[i] = hStar - depth * forceTerm[i];
+    }
+    // If addSeed flag is true, then randomly seed an excitation
+    if ((pMean == 0.) && (old_pMean == 0.)) {
+        double r = double(rand()) / double(RAND_MAX);
+        if (r < (tau * float(Nsites))) {
+            int addSite = int(r / tau);
+            new_p[addSite] = .1;
+            cout << "T: " << T << " Adding seed at site " << addSite << " given pMean " << pMean << "\n";
+            pMean += .1;
+        }
+    }
+    p = new_p;
+    h = new_h;
+    pMean /= double(Nsites);
+    T += dt;
+    return new_p;
+}
+
 vector<double> Lattice2D::trap_update(double tau, double depth) {
     double sigma = sqrt(2.);
     double Dtilde = kappa;

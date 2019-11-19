@@ -68,6 +68,7 @@ public:
     vector <double> getConfig();
     void reset();
     vector<double> update();
+    vector<double> seeding_update(double tau, double depth);
     vector<double> trap_update(double tau, double depth);
     bool is_zero();
     vector<vector<double> > simulation();
