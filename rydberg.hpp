@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <cstdio>
+#include <set>
 #include <boost/random.hpp>
 #include <boost/random/gamma_distribution.hpp>
 #include <boost/random/poisson_distribution.hpp>
@@ -77,11 +78,17 @@ public:
     void exciteSite(int site, double seed);
     vector<double> getP();
     double getPmean();
+    double getHmean();
     vector<double> getH();
     void set_b(double myB);
     int ind(int i, int j);
+    set <int, greater <int> > avalanche_set, instantaneous_set;
+    vector <int> all_avalanche_sets, avalanche_sizes;
+    vector <vector<int> > all_avalanche_sizes;
+    vector <double> start_times, avalanche_lengths;
+    double avalanche_start_time;
 private:
-    double T, Tmax, Gamma, dt, po, dx, b, kappa, pMean;
+    double T, Tmax, Gamma, dt, po, dx, b, kappa, pMean, hMean;
     int Nsites, L;
     vector<double> p, h;
 };

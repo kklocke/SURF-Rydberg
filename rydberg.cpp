@@ -593,6 +593,7 @@ Lattice2D::Lattice2D() {
     p = vector<double>(Nsites, po);
     h = vector<double>(Nsites, 0.);
     pMean = po;
+
 }
 
 Lattice2D::Lattice2D(double myT, double myDT, double myGamma, double myB, double myPo, int myL, double myDx, double myKappa) {
@@ -646,6 +647,10 @@ vector<double> Lattice2D::getP() {
 
 double Lattice2D::getPmean() {
     return pMean;
+}
+
+double Lattice2D::getHmean() {
+    return hMean;
 }
 
 void Lattice2D::exciteSite(int site, double seed) {
@@ -820,6 +825,10 @@ vector<double> Lattice2D::seeding_update(double tau, double depth) {
         }
         pStar /= (1. + pStar * dt);
         new_p[i] = pStar;
+        if (new_p[i] > 0) {
+            avalanche_set.insert(i);
+            instantaneous_set.insert(i);
+        }
         pMean += pStar;
         double hStar = h[i] - b * 0.5 * dt * (pStar + p[i]);
         if (x != 0) {
@@ -841,14 +850,28 @@ vector<double> Lattice2D::seeding_update(double tau, double depth) {
         new_h[i] = hStar - depth * forceTerm[i];
     }
     // If addSeed flag is true, then randomly seed an excitation
-    if ((pMean == 0.) && (old_pMean == 0.)) {
+    if (pMean == 0.) {
         double r = double(rand()) / double(RAND_MAX);
+        if (avalanche_set.size() > 0) {
+            all_avalanche_sets.push_back(avalanche_set.size());
+            all_avalanche_sizes.push_back(avalanche_sizes);
+            start_times.push_back(avalanche_start_time);
+            avalanche_lengths.push_back(T - avalanche_start_time);
+            avalanche_set.clear();
+            avalanche_sizes.clear();
+            instantaneous_set.clear();
+        }
         if (r < (tau * float(Nsites))) {
             int addSite = int(r / tau);
             new_p[addSite] = .1;
             cout << "T: " << T << " Adding seed at site " << addSite << " given pMean " << pMean << "\n";
             pMean += .1;
+            avalanche_start_time = T;
         }
+    }
+    else {
+        avalanche_sizes.push_back(instantaneous_set.size());
+        instantaneous_set.clear();
     }
     p = new_p;
     h = new_h;
@@ -865,6 +888,7 @@ vector<double> Lattice2D::trap_update(double tau, double depth) {
     vector<double> new_h(Nsites, 0.);
     // p[ind(i,j)], use L
     pMean = 0.;
+    hMean = 0.;
     vector<double> forceTerm = potential_grad_2D(h, Nsites, L);
     for (int i = 0; i < Nsites; i++) {
         double alpha = 0.;
@@ -923,10 +947,12 @@ vector<double> Lattice2D::trap_update(double tau, double depth) {
             hStar -= dt * Dtilde * h[i] / (dx * dx);
         }
         new_h[i] = hStar - depth * forceTerm[i];
+        hMean += new_h[i];
     }
     p = new_p;
     h = new_h;
     pMean /= double(Nsites);
+    hMean /= double(Nsites);
     T += dt;
     return new_p;
 }
